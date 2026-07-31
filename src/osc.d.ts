@@ -1,6 +1,6 @@
 declare module "osc" {
   export interface OscArgument {
-    type: string;
+    type: "i" | "f" | "s" | string;
     value: string | number;
   }
 

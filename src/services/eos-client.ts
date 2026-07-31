@@ -1,7 +1,70 @@
 import osc from "osc";
-import type { EosConfig, FeedbackEntry } from "../types.js";
+import type {
+  EosConfig,
+  FeedbackEntry,
+  OscArg,
+  TaggedOscArg,
+} from "../types.js";
 
 const FEEDBACK_BUFFER_SIZE = 200;
+
+/** Eos OSC user claimed by default: a dedicated virtual user with its own command line. */
+export const DEFAULT_OSC_USER_ID = 99;
+
+export interface ResolvedUserId {
+  userId: number;
+  /** Non-fatal advice to surface at startup, if any. */
+  warning?: string;
+}
+
+/**
+ * Validate an EOS_USER_ID value.
+ *
+ * Eos user IDs: 0 is the background user (no command line at all), -1 is whoever is
+ * currently at the desk, and 1-99 are virtual users that each get their own command
+ * line. We default to a dedicated virtual user so our commands can never merge into a
+ * half-typed command on the console operator's line.
+ */
+export function resolveUserId(raw: string | undefined): ResolvedUserId {
+  if (raw === undefined || raw.trim() === "") {
+    return { userId: DEFAULT_OSC_USER_ID };
+  }
+
+  const parsed = Number(raw.trim());
+  if (!Number.isInteger(parsed)) {
+    throw new Error(`EOS_USER_ID must be a whole number (got "${raw}").`);
+  }
+
+  if (parsed === 0) {
+    throw new Error(
+      "EOS_USER_ID 0 is the Eos background user, which has no command line — " +
+        "eos_record_cue and eos_send_raw_command would silently do nothing. " +
+        "Use 1-99 for a dedicated user, or -1 to share the console operator's."
+    );
+  }
+
+  if (parsed < -1 || parsed > 99) {
+    throw new Error(`EOS_USER_ID must be -1, or 1-99 (got ${parsed}).`);
+  }
+
+  if (parsed === -1) {
+    return {
+      userId: parsed,
+      warning:
+        "EOS_USER_ID -1 shares the console operator's command line. A command sent " +
+        "while they are mid-entry can merge with theirs. Prefer a dedicated user (1-99).",
+    };
+  }
+
+  return { userId: parsed };
+}
+
+/** Give an outgoing argument its OSC wire type, defaulting bare values the way Eos expects. */
+function toOscArgument(arg: OscArg): TaggedOscArg {
+  if (typeof arg === "number") return { type: "f", value: arg };
+  if (typeof arg === "string") return { type: "s", value: arg };
+  return arg;
+}
 
 /**
  * Thin wrapper around a UDP OSC socket talking to an ETC Eos console
@@ -13,9 +76,18 @@ const FEEDBACK_BUFFER_SIZE = 200;
  */
 export class EosClient {
   private port: osc.UDPPort;
+  /** Resolves when the socket is bound; rejects if binding fails. */
+  private socketReady: Promise<void>;
+  /** Resolves once the socket is bound AND the OSC session handshake has been sent. */
   private ready: Promise<void>;
   private feedback: FeedbackEntry[] = [];
+  private listeners = new Set<(entry: FeedbackEntry) => void>();
   private config: EosConfig;
+
+  /** True once the UDP socket has successfully bound. */
+  bound = false;
+  /** The error that prevented binding, if binding failed. */
+  bindError: Error | null = null;
 
   constructor(config: EosConfig) {
     this.config = config;
@@ -29,27 +101,61 @@ export class EosClient {
     });
 
     this.port.on("message", (msg: { address: string; args: unknown[] }) => {
-      this.feedback.push({
+      const entry: FeedbackEntry = {
         address: msg.address,
         args: msg.args,
         receivedAt: new Date().toISOString(),
-      });
+      };
+
+      this.feedback.push(entry);
       if (this.feedback.length > FEEDBACK_BUFFER_SIZE) {
         this.feedback.shift();
       }
       if (config.verbose) {
         console.error(`[eos <-] ${msg.address} ${JSON.stringify(msg.args)}`);
       }
+
+      this.notify(entry);
     });
 
-    this.port.on("error", (err: Error) => {
-      console.error("[eos-client] OSC socket error:", err.message);
-    });
+    this.socketReady = new Promise<void>((resolve, reject) => {
+      this.port.on("ready", () => {
+        this.bound = true;
+        resolve();
+      });
 
-    this.ready = new Promise((resolve) => {
-      this.port.on("ready", () => resolve());
+      this.port.on("error", (err: Error) => {
+        // Once we're bound, a socket error is transient (e.g. a failed send) and
+        // must not tear down a working client. Before that, it means we never got
+        // the port — surface it instead of leaving `ready` pending forever.
+        if (this.bound) {
+          console.error("[eos-client] OSC socket error:", err.message);
+          return;
+        }
+        this.bindError = err;
+        reject(
+          new Error(
+            `Could not bind UDP port ${config.listenPort} for Eos feedback: ${err.message}. ` +
+              "Another instance of this server may already be running, or set EOS_LISTEN_PORT to a free port."
+          )
+        );
+      });
+
       this.port.open();
     });
+
+    this.ready = this.socketReady.then(() => this.handshake());
+    // Mark the rejection handled so a failed bind doesn't trip an unhandled rejection
+    // warning; callers still see it via waitUntilReady() or any send().
+    this.ready.catch(() => undefined);
+  }
+
+  /**
+   * Claim our OSC user on the console. Doing this first means every subsequent
+   * command-line message lands on our own command line rather than the operator's.
+   */
+  private async handshake(): Promise<void> {
+    this.sendNow("/eos/user", [{ type: "i", value: this.config.userId }]);
   }
 
   async waitUntilReady(): Promise<void> {
@@ -58,19 +164,20 @@ export class EosClient {
 
   /**
    * Send a raw OSC message to Eos. `address` must start with /eos.
-   * `args` are plain JS values (string | number); this wraps them in
-   * the {type, value} shape the osc package expects.
+   * Bare numbers are sent as floats and bare strings as strings; pass an explicit
+   * {type, value} argument where Eos requires a specific wire type.
    */
-  async send(address: string, args: (string | number)[] = []): Promise<void> {
+  async send(address: string, args: OscArg[] = []): Promise<void> {
     await this.ready;
+    this.sendNow(address, args);
+  }
+
+  /** Send without waiting on readiness — used by the handshake, which runs as part of it. */
+  private sendNow(address: string, args: OscArg[]): void {
     if (!address.startsWith("/eos")) {
       throw new Error(`Eos OSC addresses must start with /eos (got "${address}")`);
     }
-    const oscArgs = args.map((a) =>
-      typeof a === "number"
-        ? { type: "f", value: a }
-        : { type: "s", value: a }
-    );
+    const oscArgs = args.map(toOscArgument);
     if (this.config.verbose) {
       console.error(`[eos ->] ${address} ${JSON.stringify(args)}`);
     }
@@ -79,21 +186,36 @@ export class EosClient {
 
   /** Send raw command-line text to Eos, as if typed on the keypad. */
   async sendCommandLine(text: string): Promise<void> {
-    // A prior command left in an unsubmitted/error state (e.g. referencing a
-    // cue list that doesn't exist) can sit open on the command line and get
-    // silently merged with the next /eos/newcmd text instead of being
-    // replaced by it. Explicitly clear first so every call starts fresh.
-    // NOTE: /eos/key/clear_cmdline is our best-guess address by naming
-    // convention with the other /eos/key/* keys already used in this file —
-    // it has not yet been confirmed against real Eos hardware. On the
-    // console itself, Backspace (not Escape) is what cleared the stuck
-    // command line during testing; re-verify this address works the same
-    // way over OSC before relying on it. See README "Known issues".
-    await this.send("/eos/key/clear_cmdline");
+    // No need to clear the command line first: we run as our own OSC user (see
+    // handshake), so there is no operator text to collide with, and /eos/newcmd
+    // replaces our line rather than appending to it.
     // Terminate with "#" or the literal word "Enter" so it submits
     // immediately instead of leaving the command line open.
     const terminated = /[#]$|\bEnter$/i.test(text.trim()) ? text : `${text} #`;
     await this.send("/eos/newcmd", [terminated]);
+  }
+
+  /**
+   * Subscribe to every message Eos sends us, as it arrives. Returns an unsubscribe
+   * function. The feedback ring buffer is unaffected — this is for consumers that
+   * need a live stream rather than a snapshot.
+   */
+  onMessage(listener: (entry: FeedbackEntry) => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private notify(entry: FeedbackEntry): void {
+    for (const listener of this.listeners) {
+      try {
+        listener(entry);
+      } catch (error) {
+        // One bad subscriber must not stop the others or kill the socket handler.
+        console.error("[eos-client] feedback listener threw:", error);
+      }
+    }
   }
 
   /** Return the most recent feedback messages received from Eos, newest last. */
@@ -109,6 +231,7 @@ export class EosClient {
   }
 
   close(): void {
+    this.listeners.clear();
     this.port.close();
   }
 }

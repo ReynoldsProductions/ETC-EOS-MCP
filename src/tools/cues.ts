@@ -147,7 +147,9 @@ Args:
       },
     },
     async ({ cue_list, cue_number }) => {
-      await eos.send(`/eos/cue/${cue_list}`, [Number(cue_number)]);
+      // Sent as a string, not Number(): cue numbers can legitimately be "5A" or
+      // "5 Part 2", which coerce to NaN and would go out as a malformed float.
+      await eos.send(`/eos/cue/${cue_list}`, [cue_number]);
       return {
         content: [{ type: "text" as const, text: `Selected cue ${cue_list}/${cue_number}.` }],
       };

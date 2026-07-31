@@ -1,9 +1,9 @@
 import type { EosClient } from "../../src/services/eos-client.js";
-import type { FeedbackEntry } from "../../src/types.js";
+import type { FeedbackEntry, OscArg } from "../../src/types.js";
 
 export interface SentMessage {
   address: string;
-  args: (string | number)[];
+  args: OscArg[];
 }
 
 /** Records calls instead of touching a real UDP socket, for testing tool handlers. */
@@ -13,7 +13,7 @@ export function createFakeEosClient() {
   let feedback: FeedbackEntry[] = [];
 
   const fake = {
-    async send(address: string, args: (string | number)[] = []) {
+    async send(address: string, args: OscArg[] = []) {
       sent.push({ address, args });
     },
     async sendCommandLine(text: string) {

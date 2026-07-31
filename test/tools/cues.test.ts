@@ -51,8 +51,13 @@ describe("cue tools", () => {
     ]);
   });
 
-  it("eos_select_cue sends the numeric cue number to the cue list address", async () => {
+  it("eos_select_cue sends the cue number to the cue list address", async () => {
     await tools.get("eos_select_cue")!.handler({ cue_list: 1, cue_number: "12.5" });
-    expect(eos.sent).toEqual([{ address: "/eos/cue/1", args: [12.5] }]);
+    expect(eos.sent).toEqual([{ address: "/eos/cue/1", args: ["12.5"] }]);
+  });
+
+  it("eos_select_cue keeps non-numeric cue numbers intact instead of sending NaN", async () => {
+    await tools.get("eos_select_cue")!.handler({ cue_list: 1, cue_number: "5A" });
+    expect(eos.sent).toEqual([{ address: "/eos/cue/1", args: ["5A"] }]);
   });
 });

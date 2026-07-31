@@ -23,8 +23,9 @@ Setup > System > Show Control > OSC:
 - Also confirm **UDP Strings & OSC** is enabled for your network interface
   under Setup > System > Network > Interface Protocols
 
-(You said OSC is already on — just double check the TX IP points at
-wherever you run this server, or feedback/status won't arrive.)
+The TX IP address is the one people get wrong: it must point at the machine
+running *this server*, not at the console. If it doesn't, commands will still
+work but no feedback or status will ever arrive.
 
 ## 2. Install and build
 
@@ -42,7 +43,20 @@ Environment variables:
 | `EOS_HOST`        | yes      | —       | IP/hostname of the machine running Eos        |
 | `EOS_SEND_PORT`   | no       | 8000    | Eos's OSC RX port                              |
 | `EOS_LISTEN_PORT` | no       | 8001    | Local port to receive Eos's OSC TX feedback on |
+| `EOS_USER_ID`     | no       | 99      | OSC user to claim — see below                  |
 | `EOS_VERBOSE`     | no       | off     | Set to `1` to log every OSC message to stderr |
+
+### `EOS_USER_ID`
+
+Eos gives each OSC user its own command line. This server claims a dedicated
+virtual user (default **99**) so its commands can never merge into a half-typed
+command on the console operator's line.
+
+- **1–99** — a virtual user with its own command line. Recommended.
+- **-1** — whoever is currently at the desk. Allowed, but warns at startup: a
+  command sent while the operator is mid-entry can garble theirs.
+- **0** — the Eos *background* user, which has no command line at all. **Rejected**,
+  because `eos_record_cue` and `eos_send_raw_command` would silently do nothing.
 
 ## 4. Run the tests
 
@@ -94,18 +108,21 @@ show file:
   the very first cue with the bare `Record Enter` command, which targets
   cue list 1/cue 1 by default), then subsequent numbered records into that
   list work normally.
-- **A failed/unsubmitted command can leak into the next one.** If a command
-  sent via `eos_send_raw_command` / `eos_record_cue` errors partway through
-  (e.g. the cue-list issue above), Eos can leave it sitting open on the
-  command line instead of discarding it, and the *next* command sent via
-  `/eos/newcmd` gets silently appended to that leftover text rather than
-  replacing it — producing garbled commands. `sendCommandLine` in
-  [`eos-client.ts`](src/services/eos-client.ts) now sends
-  `/eos/key/clear_cmdline` before every text command as a fix, but **this
-  address is unverified against real hardware** (testing was interrupted by
-  the console losing power). On the console itself, physically clearing the
-  stuck line took Backspace, not Escape — re-test `clear_cmdline` live and
-  fall back to repeated `/eos/key/backspace` if it doesn't work.
+- **A failed/unsubmitted command could leak into the next one.** *(Fixed.)* If a
+  command sent via `eos_send_raw_command` / `eos_record_cue` errored partway
+  through (e.g. the cue-list issue above), Eos left it sitting open on the shared
+  command line, and the *next* `/eos/newcmd` got appended to that leftover text
+  rather than replacing it — producing garbled commands like
+  `LIVE: Record Cue 99 /`.
+
+  The fix is to stop sharing the command line at all: the server now claims its
+  own OSC user on connect (see [`EOS_USER_ID`](#eos_user_id)), so there is no
+  operator text to collide with. An earlier attempt sent an unverified
+  `/eos/key/clear_cmdline` before each command; that has been removed in favour
+  of the user-ID approach, which is the documented mechanism.
+
+  Still to confirm on hardware: that a command sent from this server genuinely
+  leaves the console operator's command line untouched.
 
 ## Safety notes before this touches a live rig
 
