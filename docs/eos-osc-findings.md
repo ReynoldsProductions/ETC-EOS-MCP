@@ -264,6 +264,44 @@ five seconds to arrive. Reading channel values sooner returns **mid-fade** numbe
 look like the cue is wrong. Wait out the fade (or set a shorter time explicitly) before
 verifying anything.
 
+## 7d. Cue record field layout (partial decode)
+
+`/eos/out/get/cue/<list>/<n>/<part>/list/0/31` returns 31 positional args with no names.
+Decoded against known values by recording cues with deliberate times, follows and links:
+
+| Index | Meaning | Example |
+|---|---|---|
+| 0 | list index | `-1` |
+| 1 | UID | `"CCA9C7CA-…"` |
+| 2 | **label** | `"Spin Out"` |
+| 3 | **up time** (ms) | `600` |
+| 5 | down time (ms) | |
+| 7 | focus time (ms) | `600` |
+| 9 | colour time (ms) | `600` |
+| 11 | beam time (ms) | |
+| 14 | curve | `"0"` |
+| 15 | rate | `100` |
+| 19 | **link** (target cue) | `11` |
+| 20 | **follow time** (ms) | `700` |
+
+Note the label is at **index 2, not 3** — index 3 is the up time, which reads as a
+plausible-looking number and makes a wrong guess hard to spot. Chasing that mistake cost
+real time; a label that comes back as `5000` is the tell.
+
+Cue attributes are set from the command line after recording, with the same spacing rule
+as §7b:
+
+```
+Cue 99 / 11 Time 0.6 Enter
+Cue 99 / 11 Follow 0.7 Enter
+Cue 99 / 16 Link 99 / 11 Enter
+```
+
+`Follow` plus `Link` is enough to build a self-running chase — no effects engine needed.
+Verified by watching `/eos/out/active/cue/<list>/<cue>`, which reports each step as it
+fires and is the reliable way to confirm a loop is actually cycling rather than running
+once and stopping.
+
 ## 8. Traffic is genuinely change-driven
 
 With `/eos/subscribe 1` active, an idle console emitted **zero** messages over a 3-second
