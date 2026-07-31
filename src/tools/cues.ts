@@ -111,15 +111,41 @@ Calls are also rate-limited to one per few seconds to guard against a runaway lo
           ],
         };
       }
-      await eos.sendCommandLine(`Record Cue ${cue_list}/${cue_number} Enter`);
+      // Spaces around the slash are required. "Record Cue 99/1" is rejected by Eos
+      // with "Error: Number Out Of Range"; "Record Cue 99 / 1" works.
+      // Recording over an existing cue also parks on "Please Confirm" until a second
+      // Enter arrives, so this goes through the confirming variant.
+      const result = await eos.sendCommandLineConfirming(
+        `Record Cue ${cue_list} / ${cue_number} Enter`
+      );
       if (label) {
-        await eos.sendCommandLine(`Cue ${cue_list}/${cue_number} Label ${label} Enter`);
+        await eos.sendCommandLineConfirming(
+          `Cue ${cue_list} / ${cue_number} Label ${label} Enter`
+        );
       }
+
+      if (/error/i.test(result.echo)) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text:
+                `Eos rejected the record: "${result.echo}". ` +
+                `Cue list ${cue_list} may not exist — Eos does not create cue lists automatically. ` +
+                `Check with eos_get_status, or create the list on the console first.`,
+            },
+          ],
+        };
+      }
+
       return {
         content: [
           {
             type: "text" as const,
-            text: `Recorded cue ${cue_list}/${cue_number}${label ? ` with label "${label}"` : ""}.`,
+            text:
+              `Recorded cue ${cue_list}/${cue_number}${label ? ` with label "${label}"` : ""}.` +
+              (result.confirmed ? " (confirmed an overwrite of an existing cue)" : "") +
+              (result.echo ? ` Console reported: "${result.echo}".` : ""),
           },
         ],
       };

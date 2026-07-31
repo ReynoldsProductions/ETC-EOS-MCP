@@ -27,6 +27,48 @@ unambiguous: 100 is full, 1 is nearly nothing.
 
 Building to the documented 0–1 scale would make every colour in a UI almost black.
 
+## 1a. `color/xy` is 0–1 — the opposite of `color/rgb`
+
+The two colour addresses use **different scales**, which is easy to get backwards:
+
+| Address | Scale |
+|---|---|
+| `/eos/chan/<n>/color/rgb` | **0–100** |
+| `/eos/chan/<n>/color/xy` | **0–1** (true CIE 1931 chromaticity) |
+
+Sending xy on a 0–100 scale drives the request far outside the gamut and Eos clamps to
+something meaningless. Verified with a 3200K target (x=0.4232, y=0.3991):
+
+```
+xy [0.4232, 0.3991]   -> Lustr: Red 100  Green 99.9  Amber 100  Blue 0   (warm white)
+xy [42.32, 39.91]     -> Lustr: Red 0    Green 0     Amber 100  Blue 0   (nonsense)
+```
+
+**CIE xy is the reliable way to hit a colour temperature.** Neither an ETC Lustr X8 nor a
+GLP Impression X4 exposes a settable CCT parameter — the X4 reports
+`Color Temperature` with range `3199..3199`, i.e. fixed — so converting the target
+temperature to a point on the Planckian locus and letting Eos's colour engine map it to
+each fixture's emitters is the only general approach.
+
+For reference, 3200K is x=0.4232, y=0.3991. On a Lustr X8 that produces
+`Amber 100, Lime 100, Deep Red 100, Red 100, Green 99.9, Indigo 79.6, Cyan 0, Blue 0` —
+a convincing tungsten white.
+
+## 1b. Hue and Saturation are not settable as raw parameters
+
+`/eos/chan/<n>/param/hue` and `/param/saturation` **do nothing** on these fixtures, even
+though both appear in `/eos/get/params` with sensible ranges (0–360 and 0–100).
+
+Use `/eos/chan/<n>/color/hs [hue, sat]` instead — that works.
+
+This is specific to the virtual colour controls. `/eos/chan/<n>/param/<name>` is fine for
+real parameters: `param/pan [45]` moved pan from 0 to 45 exactly as expected.
+
+**Worse, Hue and Saturation always read back as 0**, whatever the actual colour. After
+setting a fully saturated cyan via `color/hs [200, 100]`, `/eos/get/params` still reported
+`Hue=0 Saturation=0` while the emitters correctly showed `Red 0, Green 100, Blue 18`.
+**Verify colour from the emitter values, never from Hue/Saturation.**
+
 ## 2. Parameter ranges are self-describing — don't hardcode units
 
 `/eos/get/params/<chan>` returns:
@@ -182,6 +224,45 @@ reason.
 
 **Subscribe to `/eos/out/user/<your id>/cmd`** for your own command-line echo. Use
 `/eos/out/cmd` only if you genuinely want a console-wide activity feed.
+
+## 7b. Command-line syntax: slashes need spaces, and destructive commands need a second Enter
+
+Two separate traps when driving the command line via `/eos/newcmd`.
+
+**Slashes must be surrounded by spaces.** The natural form fails:
+
+```
+Record Cue 99/1 Enter     ->  "LIVE: Record Cue 99 /  Error: Number Out Of Range"
+Record Cue 99 / 1 Enter   ->  "LIVE: Cue  99 / 1 : Record Cue 99 / 1 #"   works
+```
+
+Without spaces the cue number is dropped entirely and the command errors. This applies to
+`Delete` and `Cue … Label` too — anywhere a list/number pair appears.
+
+**Destructive commands park on a confirmation.** Recording over an existing cue, or
+deleting one, does not execute on the first Enter:
+
+```
+Record Cue 99 / 900 Enter   (cue is new)       -> executes immediately
+Record Cue 99 / 900 Enter   (cue now exists)   -> "Please Confirm", waits
+Delete Cue 99 / 900 Enter                      -> "Please Confirm", waits
+```
+
+The pending command sits there until a second Enter arrives (`/eos/key/enter`). **Without
+it the command silently does nothing** — no error, no change, and the OSC sender has no
+idea. `EosClient.sendCommandLineConfirming()` handles this: it sends, waits for the echo,
+and presses Enter again only if the echo contains "Please Confirm".
+
+Because Eos never acknowledges command-line input synchronously, any code that reports
+"recorded" without reading `/eos/out/user/<n>/cmd` back is guessing. Check the echo for
+`Error` before claiming success.
+
+## 7c. The default cue fade is 5 seconds
+
+Cues record with a 5000 ms up time unless told otherwise, so a cue fired over OSC takes
+five seconds to arrive. Reading channel values sooner returns **mid-fade** numbers that
+look like the cue is wrong. Wait out the fade (or set a shorter time explicitly) before
+verifying anything.
 
 ## 8. Traffic is genuinely change-driven
 
