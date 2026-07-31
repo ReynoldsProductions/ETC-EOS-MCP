@@ -79,7 +79,17 @@ export class EosClient {
 
   /** Send raw command-line text to Eos, as if typed on the keypad. */
   async sendCommandLine(text: string): Promise<void> {
-    // /eos/newcmd clears the command line first, then types `text`.
+    // A prior command left in an unsubmitted/error state (e.g. referencing a
+    // cue list that doesn't exist) can sit open on the command line and get
+    // silently merged with the next /eos/newcmd text instead of being
+    // replaced by it. Explicitly clear first so every call starts fresh.
+    // NOTE: /eos/key/clear_cmdline is our best-guess address by naming
+    // convention with the other /eos/key/* keys already used in this file —
+    // it has not yet been confirmed against real Eos hardware. On the
+    // console itself, Backspace (not Escape) is what cleared the stuck
+    // command line during testing; re-verify this address works the same
+    // way over OSC before relying on it. See README "Known issues".
+    await this.send("/eos/key/clear_cmdline");
     // Terminate with "#" or the literal word "Enter" so it submits
     // immediately instead of leaving the command line open.
     const terminated = /[#]$|\bEnter$/i.test(text.trim()) ? text : `${text} #`;

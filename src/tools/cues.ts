@@ -76,6 +76,8 @@ Args:
 
 Uses the Eos command line under the hood (there's no dedicated OSC verb for recording), equivalent to typing "Record Cue <list>/<number> Enter" on the console.
 
+The target cue_list must already exist — Eos does not auto-create cue lists and will error with "Cue List Does Not Exist" otherwise (this includes cue list 1 on a genuinely blank show). If recording fails, create the list on the console first, or record the very first cue with a bare "Record Enter" via eos_send_raw_command (targets cue list 1/cue 1 by default), then retry numbered records into that list. Use eos_get_status afterward to check for an error in the command-line echo, since success here isn't guaranteed just because the OSC message was sent.
+
 Args:
   - cue_list (number): Cue list to record into.
   - cue_number (string): Cue number to record, e.g. "5" or "12.5".

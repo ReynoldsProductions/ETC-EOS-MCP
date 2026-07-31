@@ -81,6 +81,32 @@ Add to your MCP client config (e.g. Claude Desktop's `claude_desktop_config.json
 - `eos_get_status` — read back recent OSC feedback from Eos (active cue,
   command line echo, etc.)
 
+## Known issues from live testing
+
+Found while running this against a real Nomad console with a blank/no-cue
+show file:
+
+- **Recording into a cue list that doesn't exist fails.** `eos_record_cue`
+  (and the raw `Record Cue <list>/<number>` command) errors with
+  `Cue List Does Not Exist` if the target cue list hasn't been created yet —
+  this includes cue list 1 on a genuinely blank show. Eos does not
+  auto-create the list for you; create it on the console first (or record
+  the very first cue with the bare `Record Enter` command, which targets
+  cue list 1/cue 1 by default), then subsequent numbered records into that
+  list work normally.
+- **A failed/unsubmitted command can leak into the next one.** If a command
+  sent via `eos_send_raw_command` / `eos_record_cue` errors partway through
+  (e.g. the cue-list issue above), Eos can leave it sitting open on the
+  command line instead of discarding it, and the *next* command sent via
+  `/eos/newcmd` gets silently appended to that leftover text rather than
+  replacing it — producing garbled commands. `sendCommandLine` in
+  [`eos-client.ts`](src/services/eos-client.ts) now sends
+  `/eos/key/clear_cmdline` before every text command as a fix, but **this
+  address is unverified against real hardware** (testing was interrupted by
+  the console losing power). On the console itself, physically clearing the
+  stuck line took Backspace, not Escape — re-test `clear_cmdline` live and
+  fall back to repeated `/eos/key/backspace` if it doesn't work.
+
 ## Safety notes before this touches a live rig
 
 - `eos_record_cue` and `eos_send_raw_command` are destructive — they can

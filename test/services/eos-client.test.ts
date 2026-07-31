@@ -64,6 +64,26 @@ describe("EosClient", () => {
     expect(msg.args).toEqual([{ type: "f", value: 50 }]);
   });
 
+  it("sendCommandLine clears the command line before typing new text", async () => {
+    const { sendPort, listenPort } = allocatePortPair();
+    const fakeConsole = await openLoopbackPort(sendPort, listenPort);
+    opened.push(fakeConsole);
+
+    const received: OscMessage[] = [];
+    fakeConsole.on("message", (msg) => received.push(msg));
+
+    const client = new EosClient({ host: "127.0.0.1", sendPort, listenPort, verbose: false });
+    opened.push(client);
+    await client.waitUntilReady();
+
+    await client.sendCommandLine("Record Enter");
+
+    await waitFor(() => (received.length >= 2 ? true : undefined));
+    expect(received[0].address).toBe("/eos/key/clear_cmdline");
+    expect(received[1].address).toBe("/eos/newcmd");
+    expect(received[1].args).toEqual([{ type: "s", value: "Record Enter" }]);
+  });
+
   it("rejects addresses that don't start with /eos", async () => {
     const { sendPort, listenPort } = allocatePortPair();
     const client = new EosClient({ host: "127.0.0.1", sendPort, listenPort, verbose: false });
