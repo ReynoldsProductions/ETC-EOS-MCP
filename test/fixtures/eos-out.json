@@ -1,0 +1,234 @@
+{
+  "_comment": [
+    "Real OSC output captured from an Eos console (v3.3.9.25) — see docs/eos-osc-findings.md.",
+    "Args are stored exactly as the `osc` package delivers them with metadata:true, i.e.",
+    "{type, value} wrapped, because that is what a parser has to cope with.",
+    "The show file path has been scrubbed; everything else is verbatim.",
+    "Regenerate with: EOS_HOST=<ip> node tools/diagnostics/capture.mjs"
+  ],
+  "messages": [
+    {
+      "_note": "session handshake — console echoes back the OSC user we claimed",
+      "address": "/eos/out/user",
+      "args": [{ "type": "i", "value": 99 }]
+    },
+    {
+      "address": "/eos/out/event/state",
+      "args": [{ "type": "i", "value": 1 }]
+    },
+    {
+      "address": "/eos/out/ping",
+      "args": [{ "type": "s", "value": "probe" }]
+    },
+    {
+      "_note": "eos version, show file version, gel type",
+      "address": "/eos/out/get/version",
+      "args": [
+        { "type": "s", "value": "3.3.9.25" },
+        { "type": "s", "value": "3.3.9.2" },
+        { "type": "i", "value": 0 }
+      ]
+    },
+    {
+      "_note": "path scrubbed — real responses leak a full local filesystem path",
+      "address": "/eos/out/get/show/path",
+      "args": [{ "type": "s", "value": "/path/to/Example Show.esf3d" }]
+    },
+
+    { "address": "/eos/out/get/patch/count", "args": [{ "type": "i", "value": 11 }] },
+    { "address": "/eos/out/get/cuelist/count", "args": [{ "type": "i", "value": 1 }] },
+    { "address": "/eos/out/get/group/count", "args": [{ "type": "i", "value": 4 }] },
+    { "address": "/eos/out/get/sub/count", "args": [{ "type": "i", "value": 0 }] },
+    { "address": "/eos/out/get/macro/count", "args": [{ "type": "i", "value": 0 }] },
+    { "address": "/eos/out/get/ms/count", "args": [{ "type": "i", "value": 1 }] },
+    { "address": "/eos/out/get/cp/count", "args": [{ "type": "i", "value": 1 }] },
+
+    {
+      "_note": "cue list 99, NOT 1 — never assume list numbering starts at 1",
+      "address": "/eos/out/get/cuelist/99/list/0/13",
+      "args": [
+        { "type": "i", "value": 0 },
+        { "type": "s", "value": "6929F4D5-2FC0-4398-A174-FD04AFC5A8A4" },
+        { "type": "s", "value": "" },
+        { "type": "s", "value": "Master (U1)" },
+        { "type": "s", "value": "Proportional" },
+        { "type": "F", "value": false },
+        { "type": "F", "value": false },
+        { "type": "F", "value": false },
+        { "type": "F", "value": false },
+        { "type": "T", "value": true },
+        { "type": "F", "value": false },
+        { "type": "i", "value": -1 },
+        { "type": "F", "value": false }
+      ]
+    },
+    {
+      "address": "/eos/out/get/cuelist/99/links/list/0/2",
+      "args": [
+        { "type": "i", "value": 0 },
+        { "type": "s", "value": "6929F4D5-2FC0-4398-A174-FD04AFC5A8A4" }
+      ]
+    },
+    {
+      "_note": "cue list exists but is empty",
+      "address": "/eos/out/get/cue/99/count",
+      "args": [{ "type": "i", "value": 0 }]
+    },
+    {
+      "_note": "MALFORMED STUB: reply to /eos/get/cue/99/index/0 on an empty list. Wrong address, no UID. A parser must treat a missing UID as 'absent', not build a record.",
+      "address": "/eos/out/get/cue/0/0",
+      "args": [{ "type": "i", "value": 0 }]
+    },
+
+    {
+      "_note": "magic sheet: index, uid, label ONLY — no geometry is exposed",
+      "address": "/eos/out/get/ms/1/list/0/3",
+      "args": [
+        { "type": "i", "value": 0 },
+        { "type": "s", "value": "CF78C174-F7D4-4FAC-BA61-FC111BA5CDF3" },
+        { "type": "s", "value": "" }
+      ]
+    },
+
+    {
+      "_note": "patch entry: index, uid, label, mfg, fixture type, address, intensity address, ... , part count, end address",
+      "address": "/eos/out/get/patch/1/1/list/0/21",
+      "args": [
+        { "type": "i", "value": 0 },
+        { "type": "s", "value": "0E6EDAE0-421C-481D-AD3D-6381520BDED7" },
+        { "type": "s", "value": "" },
+        { "type": "s", "value": "ETC Fixtures" },
+        { "type": "s", "value": "S4 LED S3 Lustr X8 Direct" },
+        { "type": "i", "value": 37 },
+        { "type": "i", "value": 37 },
+        { "type": "i", "value": 0 },
+        { "type": "s", "value": "" },
+        { "type": "s", "value": "" },
+        { "type": "s", "value": "" },
+        { "type": "s", "value": "" },
+        { "type": "s", "value": "" },
+        { "type": "s", "value": "" },
+        { "type": "s", "value": "" },
+        { "type": "s", "value": "" },
+        { "type": "s", "value": "" },
+        { "type": "s", "value": "" },
+        { "type": "s", "value": "" },
+        { "type": "i", "value": 1 },
+        { "type": "i", "value": 48 }
+      ]
+    },
+    {
+      "address": "/eos/out/get/patch/1/1/notes",
+      "args": [
+        { "type": "i", "value": 0 },
+        { "type": "s", "value": "0E6EDAE0-421C-481D-AD3D-6381520BDED7" },
+        { "type": "s", "value": "" }
+      ]
+    },
+
+    {
+      "address": "/eos/out/get/group/1/list/0/3",
+      "args": [
+        { "type": "i", "value": 0 },
+        { "type": "s", "value": "53A98D06-382F-4CFA-B9CE-13F38221C86F" },
+        { "type": "s", "value": "" }
+      ]
+    },
+    {
+      "address": "/eos/out/get/group/1/channels/list/0/4",
+      "args": [
+        { "type": "i", "value": 0 },
+        { "type": "s", "value": "53A98D06-382F-4CFA-B9CE-13F38221C86F" },
+        { "type": "i", "value": 1 },
+        { "type": "i", "value": 4 }
+      ]
+    },
+    {
+      "_note": "colour palette named Red",
+      "address": "/eos/out/get/cp/1/list/0/6",
+      "args": [
+        { "type": "i", "value": 0 },
+        { "type": "s", "value": "F534A44A-A565-4A49-BFFA-00343DBD51AA" },
+        { "type": "s", "value": "Red" },
+        { "type": "F", "value": false },
+        { "type": "F", "value": false },
+        { "type": "i", "value": 0 }
+      ]
+    },
+
+    {
+      "_note": "parameter list: [mfg, fixtureType, then repeating (name, current, min, max)]. Ranges differ per parameter — build controls from these, do not hardcode.",
+      "address": "/eos/out/get/params/1",
+      "args": [
+        { "type": "s", "value": "ETC Fixtures" },
+        { "type": "s", "value": "S4 LED S3 Lustr X8 Direct" },
+        { "type": "s", "value": "Intens" }, { "type": "f", "value": 0 }, { "type": "f", "value": 0 }, { "type": "f", "value": 100 },
+        { "type": "s", "value": "Red" }, { "type": "f", "value": 0 }, { "type": "f", "value": 0 }, { "type": "f", "value": 100 },
+        { "type": "s", "value": "Amber" }, { "type": "f", "value": 0 }, { "type": "f", "value": 0 }, { "type": "f", "value": 100 },
+        { "type": "s", "value": "Lime" }, { "type": "f", "value": 0 }, { "type": "f", "value": 0 }, { "type": "f", "value": 100 },
+        { "type": "s", "value": "Green" }, { "type": "f", "value": 0 }, { "type": "f", "value": 0 }, { "type": "f", "value": 100 },
+        { "type": "s", "value": "Blue" }, { "type": "f", "value": 0 }, { "type": "f", "value": 0 }, { "type": "f", "value": 100 },
+        { "type": "s", "value": "Indigo" }, { "type": "f", "value": 0 }, { "type": "f", "value": 0 }, { "type": "f", "value": 100 },
+        { "type": "s", "value": "Cyan" }, { "type": "f", "value": 0 }, { "type": "f", "value": 0 }, { "type": "f", "value": 100 },
+        { "type": "s", "value": "Deep Red" }, { "type": "f", "value": 0 }, { "type": "f", "value": 0 }, { "type": "f", "value": 100 },
+        { "type": "s", "value": "Hue" }, { "type": "f", "value": 0 }, { "type": "f", "value": 0 }, { "type": "f", "value": 360 },
+        { "type": "s", "value": "Saturation" }, { "type": "f", "value": 0 }, { "type": "f", "value": 0 }, { "type": "f", "value": 100 },
+        { "type": "s", "value": "Cooling Fan" }, { "type": "f", "value": 0 }, { "type": "f", "value": -2 }, { "type": "f", "value": -2 },
+        { "type": "s", "value": "Shutter Strobe" }, { "type": "f", "value": 0 }, { "type": "f", "value": 0 }, { "type": "f", "value": 255 },
+        { "type": "s", "value": "Dimmer Curve" }, { "type": "f", "value": 0 }, { "type": "f", "value": 0 }, { "type": "f", "value": 9 }
+      ]
+    },
+
+    {
+      "_note": "live selection summary — a formatted STRING, not structured data",
+      "address": "/eos/out/active/chan",
+      "args": [
+        { "type": "s", "value": "1  [40] ETC_Fixtures S4_LED_S3_Lustr_X8_Direct @ 37" }
+      ]
+    },
+    {
+      "_note": "pushed per-parameter data for the selected channel: [label with value, category, value]",
+      "address": "/eos/out/active/wheel/1",
+      "args": [
+        { "type": "s", "value": "Intens  [40]" },
+        { "type": "i", "value": 1 },
+        { "type": "f", "value": 40 }
+      ]
+    },
+    {
+      "address": "/eos/out/active/wheel/6",
+      "args": [
+        { "type": "s", "value": "Blue  [0]" },
+        { "type": "i", "value": 3 },
+        { "type": "f", "value": 0 }
+      ]
+    },
+    {
+      "_note": "live hue/saturation of the selection",
+      "address": "/eos/out/color/hs",
+      "args": [
+        { "type": "f", "value": 1.61247980594635 },
+        { "type": "f", "value": 98.98345947265625 }
+      ]
+    },
+    {
+      "_note": "pushed parameter update after /eos/subscribe/param/intens 1 — [value, min, max]",
+      "address": "/eos/out/param/intens",
+      "args": [
+        { "type": "f", "value": 40 },
+        { "type": "f", "value": 0 },
+        { "type": "f", "value": 100 }
+      ]
+    },
+    {
+      "_note": "EMPTY VARIANT of the same address — observed immediately after subscribing. Parser must not assume args are present.",
+      "address": "/eos/out/param/intens",
+      "args": []
+    },
+    {
+      "_note": "active cue percent complete (0.0-1.0); streams rapidly during a fade",
+      "address": "/eos/out/active/cue",
+      "args": [{ "type": "f", "value": 0 }]
+    }
+  ]
+}

@@ -95,6 +95,24 @@ Add to your MCP client config (e.g. Claude Desktop's `claude_desktop_config.json
 - `eos_get_status` — read back recent OSC feedback from Eos (active cue,
   command line echo, etc.)
 
+## Diagnostics
+
+Read-only probes for a live console live in
+[`tools/diagnostics/`](tools/diagnostics) — connectivity, show inventory, and
+per-channel parameter ranges:
+
+```bash
+npm run build
+EOS_HOST=10.0.0.5 node tools/diagnostics/probe.mjs
+```
+
+## What we learned from real hardware
+
+[`docs/eos-osc-findings.md`](docs/eos-osc-findings.md) records behaviour verified against
+an actual console, **including several points where ETC's published OSC documentation is
+wrong** — most importantly that colour arguments are 0–100, not the documented 0–1. Read it
+before building anything on top of this.
+
 ## Known issues from live testing
 
 Found while running this against a real Nomad console with a blank/no-cue
