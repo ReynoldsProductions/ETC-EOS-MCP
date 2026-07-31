@@ -139,8 +139,10 @@ show file:
   `/eos/key/clear_cmdline` before each command; that has been removed in favour
   of the user-ID approach, which is the documented mechanism.
 
-  Still to confirm on hardware: that a command sent from this server genuinely
-  leaves the console operator's command line untouched.
+  **Confirmed on hardware:** with `Chan 5 Thru 8` left un-submitted on the console
+  keypad, a `Chan 2 At 25 Enter` sent from this server executed correctly and left
+  channels 5–8 and the operator's command line untouched. Reproduce with
+  `node tools/diagnostics/user-isolation.mjs`.
 
 ## Safety notes before this touches a live rig
 
