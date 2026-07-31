@@ -11,6 +11,7 @@ export function createFakeEosClient() {
   const sent: SentMessage[] = [];
   const commandLines: string[] = [];
   let feedback: FeedbackEntry[] = [];
+  let nextEcho = "";
 
   const fake = {
     async send(address: string, args: OscArg[] = []) {
@@ -18,6 +19,13 @@ export function createFakeEosClient() {
     },
     async sendCommandLine(text: string) {
       commandLines.push(text);
+    },
+    async sendCommandLineConfirming(text: string) {
+      commandLines.push(text);
+      return { echo: nextEcho, confirmed: false };
+    },
+    lastCommandEcho() {
+      return nextEcho;
     },
     getRecentFeedback(limit = 50) {
       return feedback.slice(-limit);
@@ -35,6 +43,10 @@ export function createFakeEosClient() {
     commandLines,
     setFeedback: (entries: FeedbackEntry[]) => {
       feedback = entries;
+    },
+    /** Simulate what the console's command line reports back. */
+    setEcho: (echo: string) => {
+      nextEcho = echo;
     },
   };
 }

@@ -195,6 +195,43 @@ export class EosClient {
     await this.send("/eos/newcmd", [terminated]);
   }
 
+  /** The most recent command-line echo for our OSC user, or "" if none seen. */
+  lastCommandEcho(): string {
+    const entry = this.getFeedbackMatching(`/eos/out/user/${this.config.userId}/cmd`, 5).pop();
+    if (!entry) return "";
+    const first = entry.args[0] as { value?: unknown } | string | undefined;
+    if (typeof first === "string") return first;
+    if (first && typeof first === "object" && typeof first.value === "string") return first.value;
+    return "";
+  }
+
+  /**
+   * Send command-line text, then answer Eos's "Please Confirm" prompt if it appears.
+   *
+   * Destructive command-line operations (recording over an existing cue, deleting)
+   * don't execute immediately — Eos parks them awaiting a second Enter. Without
+   * that second press the command silently does nothing at all.
+   *
+   * Eos never acknowledges commands synchronously, so this waits `settleMs` for the
+   * echo to arrive before deciding. Returns what happened for the caller to report.
+   */
+  async sendCommandLineConfirming(
+    text: string,
+    settleMs = 900
+  ): Promise<{ echo: string; confirmed: boolean }> {
+    await this.sendCommandLine(text);
+    await new Promise((resolve) => setTimeout(resolve, settleMs));
+
+    const echo = this.lastCommandEcho();
+    if (!/please confirm/i.test(echo)) {
+      return { echo, confirmed: false };
+    }
+
+    await this.send("/eos/key/enter");
+    await new Promise((resolve) => setTimeout(resolve, settleMs));
+    return { echo: this.lastCommandEcho(), confirmed: true };
+  }
+
   /**
    * Subscribe to every message Eos sends us, as it arrives. Returns an unsubscribe
    * function. The feedback ring buffer is unaffected — this is for consumers that

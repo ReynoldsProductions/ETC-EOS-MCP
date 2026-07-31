@@ -40,15 +40,34 @@ describe("cue tools", () => {
 
   it("eos_record_cue records via the command line when confirmed", async () => {
     await tools.get("eos_record_cue")!.handler({ cue_list: 1, cue_number: "5", confirm: true });
-    expect(eos.commandLines).toEqual(["Record Cue 1/5 Enter"]);
+    // Spaces around the slash are mandatory — Eos rejects "Cue 1/5" as out of range.
+    expect(eos.commandLines).toEqual(["Record Cue 1 / 5 Enter"]);
   });
 
   it("eos_record_cue also labels the cue when a label is given", async () => {
     await tools.get("eos_record_cue")!.handler({ cue_list: 1, cue_number: "5", label: "Wash Up", confirm: true });
     expect(eos.commandLines).toEqual([
-      "Record Cue 1/5 Enter",
-      "Cue 1/5 Label Wash Up Enter",
+      "Record Cue 1 / 5 Enter",
+      "Cue 1 / 5 Label Wash Up Enter",
     ]);
+  });
+
+  it("eos_record_cue surfaces a console error instead of claiming success", async () => {
+    eos.setEcho("LIVE: Record Cue 99 /  Error: Number Out Of Range");
+    const result = await tools
+      .get("eos_record_cue")!
+      .handler({ cue_list: 99, cue_number: "1", confirm: true });
+    expect(result.content[0].text).toContain("Eos rejected the record");
+    expect(result.content[0].text).toContain("does not create cue lists automatically");
+  });
+
+  it("eos_record_cue reports the console echo on success", async () => {
+    eos.setEcho("LIVE: Cue  99 / 1 : Record Cue 99 / 1 #");
+    const result = await tools
+      .get("eos_record_cue")!
+      .handler({ cue_list: 99, cue_number: "1", confirm: true });
+    expect(result.content[0].text).toContain("Recorded cue 99/1");
+    expect(result.content[0].text).toContain("Console reported");
   });
 
   it("eos_select_cue sends the cue number to the cue list address", async () => {

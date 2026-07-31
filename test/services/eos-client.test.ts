@@ -196,6 +196,55 @@ describe("EosClient", () => {
     expect(msg.args).toEqual([{ type: "s", value: "Chan 1 At Full #" }]);
   });
 
+  it("sendCommandLineConfirming answers a 'Please Confirm' prompt with Enter", async () => {
+    const ports = allocatePortPair();
+    const fakeConsole = await openLoopbackPort(ports.sendPort, ports.listenPort);
+    opened.push(fakeConsole);
+
+    const received: OscMessage[] = [];
+    fakeConsole.on("message", (msg) => received.push(msg));
+
+    const client = new EosClient(configFor(ports, { userId: 7 }));
+    opened.push(client);
+    await client.waitUntilReady();
+
+    // Stand in for Eos parking the command on a confirmation prompt.
+    fakeConsole.send({
+      address: "/eos/out/user/7/cmd",
+      args: [{ type: "s", value: "LIVE: Record Cue 99 / 1  Please Confirm" }],
+    });
+    await waitFor(() => (client.getRecentFeedback(5).length > 0 ? true : undefined));
+
+    const result = await client.sendCommandLineConfirming("Record Cue 99 / 1 Enter", 60);
+
+    expect(result.confirmed).toBe(true);
+    expect(received.some((m) => m.address === "/eos/key/enter")).toBe(true);
+  });
+
+  it("sendCommandLineConfirming does not press Enter when no prompt appears", async () => {
+    const ports = allocatePortPair();
+    const fakeConsole = await openLoopbackPort(ports.sendPort, ports.listenPort);
+    opened.push(fakeConsole);
+
+    const received: OscMessage[] = [];
+    fakeConsole.on("message", (msg) => received.push(msg));
+
+    const client = new EosClient(configFor(ports, { userId: 7 }));
+    opened.push(client);
+    await client.waitUntilReady();
+
+    fakeConsole.send({
+      address: "/eos/out/user/7/cmd",
+      args: [{ type: "s", value: "LIVE: Cue  99 / 1 : Record Cue 99 / 1 #" }],
+    });
+    await waitFor(() => (client.getRecentFeedback(5).length > 0 ? true : undefined));
+
+    const result = await client.sendCommandLineConfirming("Record Cue 99 / 1 Enter", 60);
+
+    expect(result.confirmed).toBe(false);
+    expect(received.some((m) => m.address === "/eos/key/enter")).toBe(false);
+  });
+
   it("rejects instead of hanging when the listen port is already bound", async () => {
     const ports = allocatePortPair();
 
