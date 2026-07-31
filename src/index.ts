@@ -2,6 +2,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { EosClient } from "./services/eos-client.js";
+import { DestructiveActionGuard } from "./services/destructive-guard.js";
 import { registerCueTools } from "./tools/cues.js";
 import { registerLevelTools } from "./tools/levels.js";
 import { registerMiscTools } from "./tools/misc.js";
@@ -37,9 +38,10 @@ async function main(): Promise<void> {
     version: "1.0.0",
   });
 
-  registerCueTools(server, eos);
+  const guard = new DestructiveActionGuard();
+  registerCueTools(server, eos, guard);
   registerLevelTools(server, eos);
-  registerMiscTools(server, eos);
+  registerMiscTools(server, eos, guard);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

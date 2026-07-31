@@ -1,8 +1,9 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { EosClient } from "../services/eos-client.js";
+import type { DestructiveActionGuard } from "../services/destructive-guard.js";
 
-export function registerCueTools(server: McpServer, eos: EosClient): void {
+export function registerCueTools(server: McpServer, eos: EosClient, guard: DestructiveActionGuard): void {
   server.registerTool(
     "eos_fire_cue",
     {
@@ -78,11 +79,15 @@ Uses the Eos command line under the hood (there's no dedicated OSC verb for reco
 Args:
   - cue_list (number): Cue list to record into.
   - cue_number (string): Cue number to record, e.g. "5" or "12.5".
-  - label (string, optional): Text label to apply to the cue.`,
+  - label (string, optional): Text label to apply to the cue.
+  - confirm (boolean): Must be explicitly set to true to actually execute. Omit or set false to get a preview of what would be recorded without touching the show.
+
+Calls are also rate-limited to one per few seconds to guard against a runaway loop hammering Record.`,
       inputSchema: {
         cue_list: z.number().int().min(1).describe("Cue list to record into"),
         cue_number: z.string().min(1).describe('Cue number, e.g. "5" or "12.5"'),
         label: z.string().max(100).optional().describe("Optional text label for the cue"),
+        confirm: z.boolean().default(false).describe("Must be true to actually record; otherwise this just previews the action"),
       },
       annotations: {
         readOnlyHint: false,
@@ -91,7 +96,19 @@ Args:
         openWorldHint: true,
       },
     },
-    async ({ cue_list, cue_number, label }) => {
+    async ({ cue_list, cue_number, label, confirm }) => {
+      const preview = `Record Cue ${cue_list}/${cue_number}${label ? ` with label "${label}"` : ""}`;
+      const gate = guard.check("eos_record_cue", confirm);
+      if (!gate.allowed) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Not executed (${gate.reason}). Would run: ${preview}. Call again with confirm: true to proceed.`,
+            },
+          ],
+        };
+      }
       await eos.sendCommandLine(`Record Cue ${cue_list}/${cue_number} Enter`);
       if (label) {
         await eos.sendCommandLine(`Cue ${cue_list}/${cue_number} Label ${label} Enter`);

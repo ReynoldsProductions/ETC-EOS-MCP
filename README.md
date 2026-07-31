@@ -44,7 +44,14 @@ Environment variables:
 | `EOS_LISTEN_PORT` | no       | 8001    | Local port to receive Eos's OSC TX feedback on |
 | `EOS_VERBOSE`     | no       | off     | Set to `1` to log every OSC message to stderr |
 
-## 4. Point Claude at it
+## 4. Run the tests
+
+```bash
+npm test              # unit + integration tests
+npm run test:coverage # with coverage report (80% threshold enforced)
+```
+
+## 5. Point Claude at it
 
 Add to your MCP client config (e.g. Claude Desktop's `claude_desktop_config.json`):
 
@@ -79,9 +86,11 @@ Add to your MCP client config (e.g. Claude Desktop's `claude_desktop_config.json
 - `eos_record_cue` and `eos_send_raw_command` are destructive — they can
   overwrite show data with no undo prompt over OSC. Fine for a test show
   file; be deliberate before pointing this at production.
-- There's no rate limiting or confirmation step yet. Consider adding one
-  (e.g. a confirmation tool call, or a read-only "rehearsal mode" flag)
-  before using this during an actual performance.
+- Both tools require `confirm: true` to actually execute — without it,
+  they return a preview of what would happen and touch nothing. Calls are
+  also rate-limited (one per few seconds per action) to guard against a
+  runaway loop hammering Record or the command line. See
+  [`src/services/destructive-guard.ts`](src/services/destructive-guard.ts).
 - OSC over UDP has no auth — anyone on the same network segment can send
   Eos commands. Keep the console's network isolated the way you already do
   for DMX/sACN.

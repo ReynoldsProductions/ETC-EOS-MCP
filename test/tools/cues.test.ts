@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { registerCueTools } from "../../src/tools/cues.js";
 import { createFakeServer } from "../helpers/fake-server.js";
 import { createFakeEosClient } from "../helpers/fake-eos-client.js";
+import { DestructiveActionGuard } from "../../src/services/destructive-guard.js";
 
 describe("cue tools", () => {
   let tools: ReturnType<typeof createFakeServer>["tools"];
@@ -10,7 +11,7 @@ describe("cue tools", () => {
   beforeEach(() => {
     const fakeServer = createFakeServer();
     eos = createFakeEosClient();
-    registerCueTools(fakeServer.server, eos.client);
+    registerCueTools(fakeServer.server, eos.client, new DestructiveActionGuard());
     tools = fakeServer.tools;
   });
 
@@ -30,13 +31,20 @@ describe("cue tools", () => {
     expect(eos.sent).toEqual([{ address: "/eos/key/go_0", args: [] }]);
   });
 
-  it("eos_record_cue records via the command line", async () => {
-    await tools.get("eos_record_cue")!.handler({ cue_list: 1, cue_number: "5" });
+  it("eos_record_cue previews instead of executing when confirm is not set", async () => {
+    const result = await tools.get("eos_record_cue")!.handler({ cue_list: 1, cue_number: "5" });
+    expect(eos.commandLines).toEqual([]);
+    expect(result.content[0].text).toContain("Not executed");
+    expect(result.content[0].text).toContain("Record Cue 1/5");
+  });
+
+  it("eos_record_cue records via the command line when confirmed", async () => {
+    await tools.get("eos_record_cue")!.handler({ cue_list: 1, cue_number: "5", confirm: true });
     expect(eos.commandLines).toEqual(["Record Cue 1/5 Enter"]);
   });
 
   it("eos_record_cue also labels the cue when a label is given", async () => {
-    await tools.get("eos_record_cue")!.handler({ cue_list: 1, cue_number: "5", label: "Wash Up" });
+    await tools.get("eos_record_cue")!.handler({ cue_list: 1, cue_number: "5", label: "Wash Up", confirm: true });
     expect(eos.commandLines).toEqual([
       "Record Cue 1/5 Enter",
       "Cue 1/5 Label Wash Up Enter",

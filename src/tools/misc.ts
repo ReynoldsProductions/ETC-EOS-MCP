@@ -1,8 +1,9 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { EosClient } from "../services/eos-client.js";
+import type { DestructiveActionGuard } from "../services/destructive-guard.js";
 
-export function registerMiscTools(server: McpServer, eos: EosClient): void {
+export function registerMiscTools(server: McpServer, eos: EosClient, guard: DestructiveActionGuard): void {
   server.registerTool(
     "eos_send_raw_command",
     {
@@ -11,10 +12,14 @@ export function registerMiscTools(server: McpServer, eos: EosClient): void {
 
 Args:
   - command (string): Command line text, e.g. "Chan 1 Thru 10 At 50 Enter" or "Group 1 Record Enter".
+  - confirm (boolean): Must be explicitly set to true to actually send. Omit or set false to get a preview of the command without sending anything.
 
-The command is auto-terminated with Enter if you don't already end it with "#" or "Enter". Because this can do literally anything the console can do, treat it like you would typing directly on the desk — double-check destructive commands (Record, Delete, Update) before sending.`,
+The command is auto-terminated with Enter if you don't already end it with "#" or "Enter". Because this can do literally anything the console can do, treat it like you would typing directly on the desk — double-check destructive commands (Record, Delete, Update) before sending.
+
+Calls are also rate-limited to one per few seconds to guard against a runaway loop hammering the command line.`,
       inputSchema: {
         command: z.string().min(1).describe("Eos command line text to send"),
+        confirm: z.boolean().default(false).describe("Must be true to actually send; otherwise this just previews the command"),
       },
       annotations: {
         readOnlyHint: false,
@@ -23,7 +28,18 @@ The command is auto-terminated with Enter if you don't already end it with "#" o
         openWorldHint: true,
       },
     },
-    async ({ command }) => {
+    async ({ command, confirm }) => {
+      const gate = guard.check("eos_send_raw_command", confirm);
+      if (!gate.allowed) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Not executed (${gate.reason}). Would send: ${command}. Call again with confirm: true to proceed.`,
+            },
+          ],
+        };
+      }
       await eos.sendCommandLine(command);
       return { content: [{ type: "text" as const, text: `Sent command: ${command}` }] };
     }

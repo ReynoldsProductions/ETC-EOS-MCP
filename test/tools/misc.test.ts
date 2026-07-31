@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { registerMiscTools } from "../../src/tools/misc.js";
 import { createFakeServer } from "../helpers/fake-server.js";
 import { createFakeEosClient } from "../helpers/fake-eos-client.js";
+import { DestructiveActionGuard } from "../../src/services/destructive-guard.js";
 
 describe("misc tools", () => {
   let tools: ReturnType<typeof createFakeServer>["tools"];
@@ -10,12 +11,18 @@ describe("misc tools", () => {
   beforeEach(() => {
     const fakeServer = createFakeServer();
     eos = createFakeEosClient();
-    registerMiscTools(fakeServer.server, eos.client);
+    registerMiscTools(fakeServer.server, eos.client, new DestructiveActionGuard());
     tools = fakeServer.tools;
   });
 
-  it("eos_send_raw_command forwards text to the command line", async () => {
-    await tools.get("eos_send_raw_command")!.handler({ command: "Chan 1 Thru 10 At 50 Enter" });
+  it("eos_send_raw_command previews instead of sending when confirm is not set", async () => {
+    const result = await tools.get("eos_send_raw_command")!.handler({ command: "Chan 1 Thru 10 At 50 Enter" });
+    expect(eos.commandLines).toEqual([]);
+    expect(result.content[0].text).toContain("Not executed");
+  });
+
+  it("eos_send_raw_command forwards text to the command line when confirmed", async () => {
+    await tools.get("eos_send_raw_command")!.handler({ command: "Chan 1 Thru 10 At 50 Enter", confirm: true });
     expect(eos.commandLines).toEqual(["Chan 1 Thru 10 At 50 Enter"]);
   });
 
