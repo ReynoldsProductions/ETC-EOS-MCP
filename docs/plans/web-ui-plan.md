@@ -254,19 +254,26 @@ Adding vite/webpack doubles the build surface. PConAir's own remote UI is `index
 3. **Companion regression, empirically.** Server running: Companion still shows connected;
    `netstat -an | grep -E '3032|3037|800[01]'` confirms disjoint sockets; fire 10 cues from
    Companion with the web UI open, watch for misses or command-line garbling.
-4. **`/eos/user` isolation** *(carried over — the fix shipped but is unverified)*. Type a
-   partial command on the console keypad, send a raw command from the web UI; the
-   operator's line must be untouched. **Needs a human at the keypad.**
-5. Does `/eos/out/user/<n>/cmd` echo *our* user's line? (The command echo depends on it.)
-6. Fader config shape — `levels.ts` emits two forms; confirm which Eos accepts and whether
+4. Fader config shape — `levels.ts` emits two forms; confirm which Eos accepts and whether
    names arrive on `/eos/out/fader/<bank>/<n>/name`.
-7. `/eos/get/*` throughput before responses drop — tunes the token bucket. Use the largest
+5. `/eos/get/*` throughput before responses drop — tunes the token bucket. Use the largest
    real show file available (the current test show has only 11 channels and 0 cues, so it
    proves nothing about scale).
 
 *Resolved on hardware — no longer open:* colour units (0–100, docs were wrong), parameter
 ranges (self-describing via `/eos/get/params`), magic sheet geometry (metadata only), live
-parameter push (`/eos/subscribe/param` + `/eos/out/active/wheel/*` both work).
+parameter push (`/eos/subscribe/param` + `/eos/out/active/wheel/*` both work),
+**`/eos/user` command-line isolation** (verified against a partial command left on the
+keypad), and **which command-line address to echo**.
+
+> **Design consequence — use the right command-line address.** Both `/eos/out/cmd` and
+> `/eos/out/user/<n>/cmd` fire for a command, but `/eos/out/cmd` carries the latest command
+> from *any* user, including the console operator's typing. The UI's command echo must
+> subscribe to **`/eos/out/user/<our id>/cmd`**, or the operator's keystrokes will appear in
+> our UI.
+
+All ten documented findings are re-checkable in one run with
+`node tools/diagnostics/confirm-findings.mjs` (10/10 passing as of Eos 3.3.9.25).
 
 **Manual smoke:** start the server against a console, open `http://<host>:8090` from a
 tablet, fire a cue, drag a fader, set a colour, confirm the active-cue bar tracks the fade

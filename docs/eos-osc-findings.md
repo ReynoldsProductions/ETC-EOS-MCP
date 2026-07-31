@@ -75,6 +75,22 @@ Observed samples:
 /eos/out/active/chan         ["1  [40] ETC_Fixtures S4_LED_S3_Lustr_X8_Direct @ 37"]
 ```
 
+**Pushes are strictly change-driven — a no-op set is silent.** Setting a parameter to the
+value it already holds produces **no** output at all:
+
+```
+set intensity 60  ->  1 param push, 1 wheel push
+set intensity 30  ->  1 param push, 1 wheel push
+set intensity 30  ->  0 pushes          <- same value again
+set intensity 30  ->  0 pushes
+```
+
+This matters for UI design: **never block on a confirmation echo**, because one may never
+arrive. Treat a control as applied optimistically and let a push correct it if the value
+actually changed. (It also makes any test of the push mechanism order-dependent — pick a
+target value that differs from the current one, which is why
+`tools/diagnostics/confirm-findings.mjs` reads the current value first.)
+
 **The remaining gap:** there is no single push feed carrying *all* channels at once.
 `/eos/out/active/wheel/*` covers only the selection. To track a grid of fixtures, poll
 `/eos/get/params/<chan>` per channel, and use the pushed wheel data for whatever is
@@ -134,6 +150,38 @@ of the echo is not an error and must not be used as a connectivity check.
 
 There is no need to clear the command line before sending text if you hold your own user;
 `/eos/newcmd` replaces your line rather than appending to it.
+
+### Isolation is confirmed on hardware
+
+Tested with a partial command left on the console keypad:
+
+1. Operator typed `Chan 5 Thru 8` on the console (user 1) and did **not** press Enter.
+2. We sent `Chan 2 At 25 Enter` as user 99.
+
+Result: channel 2 went to 25, channels 5–8 **did not move**, and the operator's partial
+command line was untouched. Over OSC, `/eos/out/user/99/cmd` carried our text and
+`/eos/out/user/1/cmd` emitted **nothing at all**.
+
+Had the lines merged — the failure mode this design prevents — `Chan 5 Thru 8` followed by
+`At 25` would have driven channels 5–8 to 25. Reproduce with
+`tools/diagnostics/user-isolation.mjs`.
+
+## 7a. `/eos/out/cmd` is console-wide; `/eos/out/user/<n>/cmd` is yours
+
+Both fire for the same command, and the difference matters:
+
+```
+/eos/out/user/99/cmd   ["LIVE: Chan 2 @ 25 #", 0]   <- only our user's line
+/eos/out/cmd           ["LIVE: Chan 2 @ 25 #", 0]   <- the latest command from ANY user
+```
+
+`/eos/out/cmd` is the more obvious address to reach for, and it is the wrong one for a
+third-party controller: it carries the console operator's typing as well as your own, so a
+UI echoing it will show the operator's keystrokes and appear to "jump around" for no
+reason.
+
+**Subscribe to `/eos/out/user/<your id>/cmd`** for your own command-line echo. Use
+`/eos/out/cmd` only if you genuinely want a console-wide activity feed.
 
 ## 8. Traffic is genuinely change-driven
 
