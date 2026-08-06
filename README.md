@@ -46,6 +46,11 @@ Environment variables:
 | `EOS_USER_ID`     | no       | 99      | OSC user to claim — see below                  |
 | `EOS_VERBOSE`     | no       | off     | Set to `1` to log every OSC message to stderr |
 
+Both port variables must be whole numbers in 1–65535. Anything else — a typo, or
+a variable that is set but empty — is rejected at startup rather than defaulted,
+because a wrong-but-plausible port produces a server that looks healthy and
+silently never talks to the console.
+
 ### `EOS_USER_ID`
 
 Eos gives each OSC user its own command line. This server claims a dedicated
