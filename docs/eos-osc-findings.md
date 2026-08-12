@@ -174,6 +174,48 @@ That is list index, UID, and label — **no object geometry, positions, or layou
 "magic sheet" view in a third-party UI has to define its own layout; it cannot mirror the
 console's.
 
+### But the exported file has everything
+
+What OSC withholds, `File > Export > Magic Sheet` provides. The export is **UTF-16LE with a
+BOM**, a `<!DOCTYPE ETC>` line, and `SHOWFILE_VERSION="122"` on Eos 3.3.9. Node's
+`"utf16le"` decoder leaves the BOM as a literal U+FEFF, which breaks an XML parser on the
+first character — strip it. `src/show/magic-sheet-xml.ts` parses and re-emits this format.
+
+Structure is `MAGICSHEET > ETCGRAPHICSSCENE > ITEMLIST > ITEM*`, each `ITEM` carrying
+`@KEY` (object kind: `Symbol`, `Button`, `CPButton`, `IPButton`, `FPButton`,
+`GroupButton`, `Pipe`, `Polygon`, `RoundRect`, `Text`), `@POSX/@POSY/@ROT`, and an
+`ITEMDATA` with `RECT`, `PEN`, `BRUSH`, an optional `IMG` (symbol artwork path), and a
+`MAGICSHEET` node holding the interactive part.
+
+`TARGETTYPE`, decoded against a show whose contents were known:
+
+| Value | Target | Notes |
+|---|---|---|
+| 0 | none | decoration, or an unassigned button |
+| 2 | Cue | `TARGETLISTID` is the cue list |
+| 3 | Group | |
+| 6 | Palette | `TARGETLISTID` selects the list: 1=IP, 2=FP, 3=CP, 4=BP |
+| 20 | Channel | |
+
+**Still undecoded**, and preserved verbatim on round-trip rather than guessed at:
+`FIELDTYPE` (only 1, 3, 9 and 16 observed), `MODE` (0 = decoration, 1 = target-linked,
+4 seen on unassigned buttons), and `PENLINK`/`BRUSHLINK` — which are `0` on every object in
+both sample sheets and are the likely mechanism for making an object's outline or fill
+follow live intensity or colour. Worth pinning down: it would give live colour feedback on
+every fixture icon for the cost of one attribute.
+
+### Nothing warns you when a sheet points at something that does not exist
+
+A button whose target was deleted, never created, or pointed at the wrong list looks
+completely normal and does nothing when pressed. There is no error, no visual difference,
+and no console warning. In the Faire show, **34 of 58 interactive objects** on one sheet
+were dead this way: twelve colour palette buttons where only one (empty) palette existed,
+four focus buttons with no focus palettes in the show at all, and thirteen cue buttons
+pointed at cue list 1 when the show's only list is 99.
+
+`tools/diagnostics/audit-sheet.mjs` resolves every target on a sheet against the live
+console and exits non-zero if any is dead. Worth running before a show, not after.
+
 ## 7. `/eos/user` gives you your own command line
 
 `/eos/user=<n>`:
@@ -301,6 +343,70 @@ Cue 99 / 16 Link 99 / 11 Enter
 Verified by watching `/eos/out/active/cue/<list>/<cue>`, which reports each step as it
 fires and is the reliable way to confirm a loop is actually cycling rather than running
 once and stopping.
+
+## 7e. Multi-word keywords need underscores — and getting it wrong records the wrong object
+
+The most dangerous trap found so far. Multi-word Eos keys must be written as a **single
+underscored token** in `/eos/newcmd` text:
+
+```
+Record Color_Palette 90 Enter    ->  "Record Color Palette 90 #"        records CP 90
+Record Color Palette 90 Enter    ->  "Record Cue 99 / 90 #"             records a CUE
+```
+
+The second form **does not error**. Eos consumes `Color`, discards `Palette`, and falls
+through to its default record target — so a command intended to create colour palette 90
+silently creates *cue 90* in the active cue list instead. The only way to notice is to read
+the echo, where `Record Cue 99 / 90` appears in place of the palette.
+
+`Delete Color Palette 90` has the matching failure: it deletes **cue 90**, not the palette.
+A cleanup routine written with the wrong spacing will destroy cues while leaving the
+palettes it was meant to remove untouched.
+
+Confirmed for `Color_Palette`, `Focus_Palette` and `Intensity_Palette`. Assume the same for
+every multi-word key.
+
+## 7f. A single-digit number is read as tens
+
+Eos's two-digit entry convention applies to parameters, not just intensity:
+
+| Sent | Echo | Actual result |
+|---|---|---|
+| `Chan 5 Pan + 5 Enter` | `Pan + 50` | pan moved **+50°** |
+| `Chan 5 Pan + 05 Enter` | `Pan + 05` | pan moved +5° |
+| `Chan 5 Pan + 5.0 Enter` | `Pan + 5.0` | pan moved +5° |
+| `Chan 5 Pan + 15 Enter` | `Pan + 15` | pan moved +15° |
+
+So a nudge control built the obvious way moves **ten times too far**, with no error. Emit
+two digits or a decimal point for anything below 10 — `src/show/build-plan.ts` has
+`eosNumber()` for exactly this. Two-digit values are already literal and need no special
+handling.
+
+## 7g. `Release` is not a command-line word; `Sneak` is
+
+```
+Chan 1 Thru 15 Release Enter   ->  "Error: Syntax Error"
+Chan 1 Thru 15 Sneak Enter     ->  works — releases manual control
+```
+
+This matters because of the next finding.
+
+## 7h. Record captures every channel holding manual data, not the current selection
+
+Selecting `Chan 1 Thru 4` and then recording a palette does **not** produce a palette of
+channels 1–4. It produces one containing every channel that has manual data in the
+programmer, whatever was selected:
+
+```
+Chan 1 Thru 4 Enter
+Record Color_Palette 90 Enter
+/eos/out/get/cp/90/channels/list/0/4  [.., uid, "1-11", "13-15"]   <- not 1-4
+```
+
+Those extra channels were left over from earlier commands. Any script recording a series of
+palettes therefore has to `Sneak` between them, or each palette silently accumulates the
+contents of the one before. Order matters: the Sneak must come **before** the parameter
+values are set, not after, or it releases the very data the Record is meant to capture.
 
 ## 8. Traffic is genuinely change-driven
 
